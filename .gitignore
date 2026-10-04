@@ -1,0 +1,13 @@
+data/
+work/
+release/
+dist/
+build/
+__pycache__/
+*.pyc
+*.zip
+*.png
+verification*.json
+*.log
+*.sqlite3*
+.venv/
