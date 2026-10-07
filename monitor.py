@@ -14,6 +14,8 @@ PORT = int(os.environ.get('PROXY_MONITOR_PORT','18791'))
 PWSH = Path(shutil.which('pwsh') or shutil.which('powershell') or 'powershell.exe')
 if getattr(sys,'frozen',False): PWSH=Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0/powershell.exe'
 RUNTIME_ERROR=None
+CSV_ERROR=None
+PIPELINE={}
 
 @contextmanager
 def connect(path=DB):
@@ -65,7 +67,7 @@ def dimension(info):
     fields = ('source','host','ip','port','network','process','path','parent','parent_path','binding','chains','rule','rule_payload')
     return hashlib.sha256(json.dumps({k:info.get(k) for k in fields},sort_keys=True,ensure_ascii=False).encode()).hexdigest()
 
-def ingest(snapshot, path=DB, config=None):
+def ingest(snapshot, path=DB, config=None, maintenance=True):
     config=config or settings.load()
     now = snapshot['time']
     day = datetime.fromtimestamp(now).strftime('%Y-%m-%d')
@@ -149,7 +151,7 @@ def ingest(snapshot, path=DB, config=None):
                         meta[key]=meta.get(key,0)+amount;put(db,key,meta[key])
             delta_down += dd; delta_up += du
         elapsed = max(.1,now-last) if last else 1
-        activity.finish(db,programs,delta_down,delta_up,elapsed,now,gap,config,put,meta)
+        activity.finish(db,programs,delta_down,delta_up,elapsed,now,gap,config,put,meta,maintenance=maintenance)
         put(db,'sample_interval',config['interval'])
         put(db,'last_sample',now); put(db,'error',None)
         put(db,'rate_valid',not gap)
@@ -163,7 +165,7 @@ def ingest(snapshot, path=DB, config=None):
             put(db,'view_started',now)
         put(db,'unclassified',snapshot.get('unclassified',0)); put(db,'sample_ms',snapshot.get('duration_ms',0))
         # Every minute, bound retained detail. Lifetime counters survive pruning.
-        if now-meta.get('last_maintenance',0)>=60:
+        if maintenance and now-meta.get('last_maintenance',0)>=60:
             pressure=storage.maintain(db,now,config)
             put(db,'last_maintenance',now);put(db,'storage_pressure',pressure)
 
@@ -201,45 +203,98 @@ def report(path=DB, query='', day='', limit=2000):
         active=[]
         for r in db.execute('SELECT info FROM connections WHERE last_seen>=?',(meta.get('last_sample',0)-.01,)):
             active.append(json.loads(r['info']))
-        return {'product':'proxy-traffic-monitor','version':VERSION,'meta':meta,'runtime_error':RUNTIME_ERROR,'total_down':total[0],'total_up':total[1], 'rows':results,'truncated':truncated,'row_limit':limit,
+        return {'product':'proxy-traffic-monitor','pipeline':dict(PIPELINE),'version':VERSION,'meta':meta,'runtime_error':RUNTIME_ERROR,'total_down':total[0],'total_up':total[1], 'rows':results,'truncated':truncated,'row_limit':limit,
                 'storage':storage.usage(path),'csv':{**csvlog.usage(path),'pending_records':pending_count,'pending_bytes':pending_bytes},'settings':settings.public(settings.load()),
                 'activity':activity.report(db,time.time(),meta),'diagnosis':activity.diagnose(meta.get('error') or RUNTIME_ERROR),'active_connections':active,'events':events,'now':time.time(),'database':str(path)}
 
-def worker(stop):
-    global RUNTIME_ERROR
-    last_compact=0
+def background_io(stop, path, mode):
+    """One CSV writer owns the recovery journal. File I/O never holds a DB transaction."""
+    global CSV_ERROR
     while not stop.is_set():
-        process=None
         try:
-            process=subprocess.Popen([str(PWSH),'-NoProfile','-ExecutionPolicy','Bypass','-File',str(ASSETS/'collector.ps1'),'-SettingsPath',str(settings.FILE)],
-                 stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,creationflags=0x08000000)
-            inbox=queue.Queue(maxsize=10)
-            def reader(proc, destination):
-                for line in proc.stdout:
-                    destination.put(line)
-                destination.put(None)
-            threading.Thread(target=reader,args=(process,inbox),daemon=True).start()
-            while not stop.is_set():
-                line=inbox.get(timeout=15)
-                if line is None: raise RuntimeError('采集子进程退出，正在重新连接')
-                config=settings.load()
-                # Flush durable pending data before accepting more; a CSV write failure
-                # pauses capture instead of growing an unbounded in-memory/file queue.
-                csvlog.flush(connect,DB,config)
-                ingest(json.loads(line.decode('utf-8-sig')),config=config)
-                RUNTIME_ERROR=None
-                if time.time()-last_compact>3600:
-                    storage.compact(DB,config['target_mb']);last_compact=time.time()
-        except Exception as e:
-            RUNTIME_ERROR=str(e) or '采集超过 15 秒没有响应'
-            try:ingest({'time':time.time(),'error':RUNTIME_ERROR})
-            except Exception:pass
-            stop.wait(2)
-        finally:
-            if process and process.poll() is None:
-                process.terminate()
-                try: process.wait(timeout=5)
-                except subprocess.TimeoutExpired: process.kill()
+            config=settings.load()
+            if mode=='csv':
+                csvlog.flush(connect,path,config)
+                CSV_ERROR=None
+            else:
+                now=time.time()
+                with connect(path) as db:
+                    db.execute('BEGIN IMMEDIATE')
+                    meta=getmeta(db)
+                    pressure=storage.maintain(db,now,config)
+                    activity.maintain(db,now,put,meta)
+                    put(db,'last_maintenance',now);put(db,'storage_pressure',pressure)
+                    put(db,'maintenance_error',None)
+                # PASSIVE checkpoint does not wait for readers; avoid online VACUUM.
+                with connect(path) as db:db.execute('PRAGMA wal_checkpoint(PASSIVE)')
+        except Exception as error:
+            if mode=='csv':CSV_ERROR=str(error)
+            else:
+                try:
+                    with connect(path) as db:put(db,'maintenance_error',str(error)[:500])
+                except Exception:pass
+        stop.wait(5 if mode=='csv' else 60)
+
+def worker(stop, path=DB, collector_command=None):
+    global RUNTIME_ERROR
+    # Keep WAL open between short-lived connections. Otherwise SQLite checkpoints
+    # and removes WAL whenever the final connection closes, on every sample.
+    anchor=sqlite3.connect(str(path),timeout=15)
+    anchor.execute('SELECT key FROM meta LIMIT 1').fetchone()
+    io_stop=threading.Event()
+    services=[threading.Thread(target=background_io,args=(io_stop,path,mode),daemon=True) for mode in ('csv','maintenance')]
+    for service in services:service.start()
+    try:
+        while not stop.is_set():
+            process=None;reader_stop=threading.Event();reader_thread=None
+            try:
+                command=collector_command or [str(PWSH),'-NoProfile','-ExecutionPolicy','Bypass','-File',str(ASSETS/'collector.ps1'),'-SettingsPath',str(settings.FILE)]
+                process=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,creationflags=0x08000000)
+                inbox=queue.Queue(maxsize=10)
+                def reader(proc,destination,finished):
+                    def deliver(line):
+                        while not finished.is_set():
+                            try:destination.put(line,timeout=.2);return
+                            except queue.Full:continue
+                    try:
+                        for line in proc.stdout:
+                            if finished.is_set():break
+                            PIPELINE['last_received']=time.time();deliver(line)
+                    finally:deliver(None)
+                reader_thread=threading.Thread(target=reader,args=(process,inbox,reader_stop),daemon=True);reader_thread.start()
+                last_line=time.monotonic()
+                while not stop.is_set():
+                    config=settings.load()
+                    try:line=inbox.get(timeout=.5)
+                    except queue.Empty:
+                        if time.monotonic()-last_line>max(15,config['interval']*3+5):raise RuntimeError('采集接口超时，正在重新连接')
+                        continue
+                    if line is None:raise RuntimeError('采集子进程退出，正在重新连接')
+                    last_line=time.monotonic()
+                    if CSV_ERROR:raise RuntimeError(CSV_ERROR)
+                    snapshot=json.loads(line.decode('utf-8-sig'));started=time.monotonic()
+                    # Preserve every frame, including connections that ended while
+                    # queued and counter resets; never replace FIFO with latest-only.
+                    ingest(snapshot,path=path,config=config,maintenance=False)
+                    PIPELINE.update(queue_depth=inbox.qsize(),processing_ms=round((time.monotonic()-started)*1000),processing_lag=max(0,time.time()-snapshot['time']))
+                    RUNTIME_ERROR=None
+            except Exception as error:
+                RUNTIME_ERROR=str(error) or '采集没有响应'
+                try:ingest({'time':time.time(),'error':RUNTIME_ERROR},path=path)
+                except Exception:pass
+                stop.wait(2)
+            finally:
+                reader_stop.set()
+                if process and process.poll() is None:
+                    process.terminate()
+                    try:process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:process.kill();process.wait(timeout=5)
+                if reader_thread:reader_thread.join(timeout=1)
+                if process and process.stdout:process.stdout.close()
+    finally:
+        io_stop.set()
+        for service in services:service.join(timeout=20)
+        anchor.close()
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self,*args): pass

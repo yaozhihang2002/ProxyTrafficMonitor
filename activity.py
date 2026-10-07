@@ -20,7 +20,7 @@ def record(db, info, down, up, now):
     down=activity.down+excluded.down,up=activity.up+excluded.up,info=excluded.info''',
     (int(now//10)*10,key(info),json.dumps(info,ensure_ascii=False),down,up))
 
-def finish(db, programs, down, up, elapsed, now, gap, config, put, meta):
+def finish(db, programs, down, up, elapsed, now, gap, config, put, meta, maintenance=True):
     db.execute('''INSERT INTO traffic_minutes VALUES(?,?,?,1) ON CONFLICT(bucket) DO UPDATE SET
     down=traffic_minutes.down+excluded.down,up=traffic_minutes.up+excluded.up,samples=samples+1''',(int(now//60)*60,down,up))
     db.execute('DELETE FROM program_rates')
@@ -50,6 +50,9 @@ def finish(db, programs, down, up, elapsed, now, gap, config, put, meta):
             detail={'program':info.get('process') or '未知程序','parent':info.get('parent'),'path':info.get('path'),'bytes':row['amount'],'minutes':config['alert_window']}
             db.execute('INSERT INTO events(ts,kind,detail) VALUES(?,?,?)',(now,'traffic_alert',json.dumps(detail,ensure_ascii=False)))
             db.execute('INSERT INTO alert_state VALUES(?,1,?) ON CONFLICT(program) DO UPDATE SET latched=1,last_alert=excluded.last_alert',(program,now))
+    if maintenance:maintain(db,now,put,meta)
+
+def maintain(db,now,put,meta):
     if now-meta.get('activity_maintenance',0)>=60:
         for table,column,cutoff,cap in [('activity','bucket',now-3600,50000),('alert_activity','bucket',now-3600,50000),('traffic_minutes','bucket',now-7*86400,10080),('alert_state','last_alert',now-86400,5000)]:
             db.execute(f'DELETE FROM {table} WHERE {column}<?',(cutoff,))
