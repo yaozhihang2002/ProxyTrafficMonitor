@@ -1,6 +1,6 @@
 """Local, read-only Mihomo traffic accounting. Python standard library only."""
 import argparse, csv, hashlib, io, json, os, queue, sqlite3, subprocess, threading, time, tempfile, shutil, sys
-import settings, storage, csvlog, activity
+import settings, storage, csvlog, activity, lifecycle
 from version import VERSION
 from contextlib import contextmanager
 from datetime import datetime
@@ -242,7 +242,7 @@ def worker(stop, path=DB, collector_command=None):
     anchor=sqlite3.connect(str(path),timeout=15)
     anchor.execute('SELECT key FROM meta LIMIT 1').fetchone()
     io_stop=threading.Event()
-    services=[threading.Thread(target=background_io,args=(io_stop,path,mode),daemon=True) for mode in ('csv','maintenance')]
+    services=[threading.Thread(target=lifecycle.resilient,args=(io_stop,background_io,io_stop,path,mode),name=mode,daemon=True) for mode in ('csv','maintenance')]
     for service in services:service.start()
     try:
         while not stop.is_set():
