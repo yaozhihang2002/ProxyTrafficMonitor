@@ -44,12 +44,14 @@ def initialize(path=DB):
         CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY, ts REAL, kind TEXT, detail TEXT);
         CREATE TABLE IF NOT EXISTS csv_pending(id TEXT PRIMARY KEY,bucket INTEGER,info TEXT,down INTEGER,up INTEGER);
         CREATE INDEX IF NOT EXISTS ix_totals_seen ON totals(last_seen);
+        CREATE INDEX IF NOT EXISTS ix_totals_dimension_seen ON totals(dimension,last_seen DESC);
         CREATE INDEX IF NOT EXISTS ix_connections_target ON connections(
           json_extract(info,'$.host'),json_extract(info,'$.ip'),json_extract(info,'$.path'),last_seen);
         CREATE INDEX IF NOT EXISTS ix_connections_seen ON connections(last_seen);
         CREATE TABLE IF NOT EXISTS view_totals AS SELECT * FROM totals WHERE 0;
         CREATE UNIQUE INDEX IF NOT EXISTS ix_view_key ON view_totals(day,dimension);
         CREATE INDEX IF NOT EXISTS ix_view_seen ON view_totals(last_seen);
+        CREATE INDEX IF NOT EXISTS ix_view_dimension_seen ON view_totals(dimension,last_seen DESC);
         ''')
         activity.initialize(db,time.time())
         db.execute("INSERT OR IGNORE INTO meta VALUES('started',?)", (str(time.time()),))
@@ -179,7 +181,7 @@ def set_view(action,path=DB):
         put(db,'view_active',action=='start')
     return {'ok':True}
 
-def report(path=DB, query='', day='', limit=2000):
+def report(path=DB, query='', day='', limit=2000, details=True):
     with connect(path) as db:
         meta = getmeta(db)
         table='view_totals' if meta.get('view_active') else 'totals'
@@ -188,9 +190,11 @@ def report(path=DB, query='', day='', limit=2000):
         if day: sql += ' AND day=?'; args.append(day)
         if query:sql+=' AND instr(lower(info),lower(?))>0';args.append(query)
         sql += ' GROUP BY dimension ORDER BY sum(down)+sum(up) DESC LIMIT ?';args.append(limit+1)
+        # One indexed query instead of thousands of unindexed per-row scans.
+        sql=f'WITH grouped AS ({sql}) SELECT grouped.*,(SELECT info FROM {table} latest WHERE latest.dimension=grouped.dimension ORDER BY last_seen DESC LIMIT 1) info FROM grouped'
         results=[]
-        for r in db.execute(sql,args):
-            info = json.loads(db.execute(f'SELECT info FROM {table} WHERE dimension=? ORDER BY last_seen DESC LIMIT 1',(r['dimension'],)).fetchone()[0])
+        for r in db.execute(sql,args) if details else []:
+            info = json.loads(r['info'])
             item={**info,'down':r['down'],'up':r['up'],'first_seen':r['first_seen'],'last_seen':r['last_seen']}
             results.append(item)
         truncated=len(results)>limit;results=results[:limit]
@@ -354,7 +358,7 @@ class Handler(BaseHTTPRequestHandler):
                             if len(history)>=200: break
                 body=json.dumps(history,ensure_ascii=False).encode();mime='application/json; charset=utf-8'
             elif route.path in ('/api/status','/export.csv'):
-                data=report(query=params.get('q',[''])[0],day=params.get('day',[''])[0],limit=5000 if route.path=='/export.csv' else 2000)
+                data=report(query=params.get('q',[''])[0],day=params.get('day',[''])[0],limit=5000 if route.path=='/export.csv' else 2000,details=route.path=='/export.csv' or params.get('details',['1'])[0]!='0')
                 if route.path=='/api/status': body=json.dumps(data,ensure_ascii=False).encode(); mime='application/json; charset=utf-8'
                 else:
                     stream=io.StringIO(); fields=['process','path','parent','parent_path','pid','created','host','ip','port','network','chains','binding','down','up','first_seen','last_seen']
@@ -370,6 +374,13 @@ class Handler(BaseHTTPRequestHandler):
             if route.path=='/export.csv': self.send_header('Content-Disposition','attachment; filename="proxy-traffic.csv"')
             self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
         except (BrokenPipeError,ConnectionResetError): pass
+        except Exception:
+            lifecycle.LOG.exception('HTTP request failed: %s',route.path)
+            body=b'{"ok":false,"message":"Local data is temporarily unavailable"}'
+            try:
+                self.send_response(503);self.send_header('Content-Type','application/json')
+                self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
+            except (BrokenPipeError,ConnectionResetError):pass
         except Exception: self.send_error(500,'Unable to read local database')
 
 def main():

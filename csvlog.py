@@ -88,4 +88,8 @@ def _flush(connect,path,config,now=None,force=False):
 
 def usage(path):
     folder=Path(path).parent/'csv';files=list(folder.glob('proxy-????-??-??-????.csv'))
-    return {'folder':str(folder),'files':len(files),'bytes':sum(p.stat().st_size for p in files)}
+    sizes=[]
+    for file in files:
+        try:sizes.append(file.stat().st_size)
+        except FileNotFoundError:pass  # Retention can remove a file during a status read.
+    return {'folder':str(folder),'files':len(sizes),'bytes':sum(sizes)}
