@@ -1,6 +1,6 @@
 """Local, read-only Mihomo traffic accounting. Python standard library only."""
 import argparse, csv, hashlib, io, json, os, queue, sqlite3, subprocess, threading, time, tempfile, shutil, sys
-import settings, storage, csvlog, activity, lifecycle
+import settings, storage, csvlog, activity, lifecycle, usage_stats
 from version import VERSION
 from contextlib import contextmanager
 from datetime import datetime
@@ -53,6 +53,7 @@ def initialize(path=DB):
         CREATE INDEX IF NOT EXISTS ix_view_seen ON view_totals(last_seen);
         CREATE INDEX IF NOT EXISTS ix_view_dimension_seen ON view_totals(dimension,last_seen DESC);
         ''')
+        usage_stats.initialize(db)
         activity.initialize(db,time.time())
         db.execute("INSERT OR IGNORE INTO meta VALUES('started',?)", (str(time.time()),))
         existing=db.execute('SELECT coalesce(sum(down),0),coalesce(sum(up),0) FROM totals').fetchone()
@@ -152,6 +153,7 @@ def ingest(snapshot, path=DB, config=None, maintenance=True):
                     for key,amount in [('view_down',dd),('view_up',du),('view_unknown',dd+du if info.get('binding')!='socket' else 0)]:
                         meta[key]=meta.get(key,0)+amount;put(db,key,meta[key])
             delta_down += dd; delta_up += du
+        usage_stats.record(db, now, delta_down, delta_up, last, gap)
         elapsed = max(.1,now-last) if last else 1
         activity.finish(db,programs,delta_down,delta_up,elapsed,now,gap,config,put,meta,maintenance=maintenance)
         put(db,'sample_interval',config['interval'])
@@ -338,6 +340,14 @@ class Handler(BaseHTTPRequestHandler):
                 body=(ASSETS/'index.html').read_bytes(); mime='text/html; charset=utf-8'
             elif route.path in ('/trend-chart.js','/ui.css'):
                 body=(ASSETS/route.path[1:]).read_bytes();mime='text/javascript; charset=utf-8' if route.path.endswith('.js') else 'text/css; charset=utf-8'
+            elif route.path=='/api/usage':
+                with connect() as db:
+                    result=usage_stats.report(db,params.get('month',[''])[0])
+                body=json.dumps(result,ensure_ascii=False).encode();mime='application/json; charset=utf-8'
+            elif route.path=='/api/usage-programs':
+                with connect() as db:
+                    result=usage_stats.programs(db,params.get('period',[''])[0])
+                body=json.dumps(result,ensure_ascii=False).encode();mime='application/json; charset=utf-8'
             elif route.path=='/api/settings':
                 body=json.dumps(settings.public(settings.load()),ensure_ascii=False).encode();mime='application/json; charset=utf-8'
             elif route.path=='/api/history':

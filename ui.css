@@ -26,3 +26,7 @@ main>.toolbar{gap:8px 10px}
 @media(max-width:760px){main>.toolbar input[type=search]{flex:1 1 100%;max-width:none;min-width:0}}
 
 #activityPanel .activityBody{grid-template-columns:minmax(0,1fr)}#recentPanel .recentHeading{display:flex;align-items:center;gap:12px;flex-wrap:wrap}#recentPanel .recentTable{max-height:260px}#historyPanel{border:1px solid var(--line);border-radius:8px;padding:12px 16px;background:white;margin-bottom:14px}#historyPanel>summary{font-weight:600;cursor:pointer}
+
+.usageCards{display:flex;gap:48px;padding:16px 0}.usageCards>div{display:grid;gap:5px}.usageCards strong{font-size:25px}.usageCards span{font-size:13px;color:#617d88}.usageControls{margin:16px 0}.usageBars{display:flex;height:154px;gap:3px;overflow-x:auto;border-bottom:1px solid #ccdadd}.usageBar{padding:0 2px;flex:1;min-width:22px;border:0;background:transparent;font-size:11px;display:flex;flex-direction:column;align-items:center;gap:7px}.usagePlot{height:125px;width:100%;display:flex;align-items:flex-end;background:#f4f8f8}.usageStack{width:100%;display:flex;flex-direction:column}.usageUpload{background:#d57713}.usageDownload{background:#237bd2}.usageBar:focus-visible{outline:2px solid #127f76;outline-offset:-2px}#usageReadout{min-height:24px;margin:10px 0;font-size:13px}#usagePanel .recentTable{max-height:240px}@media(max-width:600px){.usageCards{gap:24px}.usageControls{flex-wrap:wrap}}
+
+#usagePanel .recentHeading{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.usageControls label{display:flex;align-items:center;gap:8px}
