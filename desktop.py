@@ -13,6 +13,7 @@ from tray import Tray
 import tray_fallback
 import close_ui
 import lifecycle
+import autostart
 
 def window_or_tray(url,smoke=False):
     try:
@@ -96,7 +97,7 @@ def main():
         shutdown();raise
     if window is None:shutdown();return
     window.report_callback_exception=lambda kind,value,trace:lifecycle.LOG.error('Window callback failed',exc_info=(kind,value,trace))
-    window.title('代理流量观察台');window.geometry('460x320');window.resizable(False,False)
+    window.title('代理流量观察台');window.geometry('460x355');window.resizable(False,False)
     tk.Label(window,text='代理流量观察台',font=('Microsoft YaHei UI',18,'bold')).pack(pady=(20,8))
     tk.Label(window,text='后台正在监测 · 关闭网页仍会记录\n隐藏到托盘后继续记录，双击托盘图标可恢复。',font=('Microsoft YaHei UI',10)).pack(pady=8)
     tk.Button(window,text='打开监测网页 / 连接设置',command=lambda:webbrowser.open(url),width=32).pack(pady=5)
@@ -126,6 +127,15 @@ def main():
     tk.Button(actions,text='隐藏到托盘',command=tray.hide,width=15).pack(side='left',padx=4)
     tk.Button(actions,text='退出监测',command=close,width=15).pack(side='left',padx=4)
     tk.Button(window,text='关闭行为设置',command=reset_close_choice,relief='flat',fg='#397568').pack(pady=3)
+    startup=tk.BooleanVar(window,value=False)
+    try:startup.set(autostart.enabled())
+    except (OSError,RuntimeError):pass
+    def change_startup():
+        try:autostart.set_enabled(startup.get())
+        except (OSError,RuntimeError) as error:
+            startup.set(not startup.get())
+            messagebox.showerror('开机自启设置失败',str(error),parent=window)
+    tk.Checkbutton(window,text='开机自启（登录后隐藏到托盘）',variable=startup,command=change_startup).pack(pady=3)
     window.protocol('WM_DELETE_WINDOW',on_close)
     if '--recovered' in sys.argv:tray.hide()
     else:webbrowser.open(url)
