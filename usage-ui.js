@@ -66,7 +66,7 @@
 
     function setReadout() {
         const row = periods.get(hovered || focused || selected);
-        let text = '选择日期查看流量和程序排行。';
+        let text = '';
         if (row) {
             const date = periodLabel(row.period);
             text = row.recorded
@@ -141,7 +141,6 @@
         selected = '';
         if (pendingRanking) pendingRanking.abort();
         pendingRanking = undefined;
-        ranking.open = false;
         ranking.hidden = true;
     }
 
@@ -189,7 +188,6 @@
         setReadout();
         $('usageProgramTitle').textContent = `${periodLabel(period)} 程序排行`;
         ranking.hidden = false;
-        ranking.open = true;
         if (fromTable) {
             ranking.scrollIntoView({block: 'nearest'});
             $('usageProgramTitle').focus({preventScroll: true});

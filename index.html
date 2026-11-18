@@ -21,25 +21,26 @@
   </aside>
   <div class="workspace">
     <header class="topBar">
-      <div class="topBarStart">
-        <button id="sidebarToggle" type="button" aria-controls="navigation" aria-expanded="true">收起侧栏</button>
-        <div class="status" id="status" role="status"><span class="dot" aria-hidden="true"></span><span id="stateText">正在连接采集器</span></div>
-        <span class="secondary" id="updated"></span>
-      </div>
-      <div class="topBarActions">
-        <button id="pauseView" aria-pressed="false">暂停刷新</button>
-        <button id="openSettings">设置</button>
+      <div class="contentFrame topBarInner">
+        <div class="topBarStart">
+          <button id="sidebarToggle" type="button" aria-controls="navigation" aria-expanded="true">收起侧栏</button>
+          <div class="status" id="status" role="status"><span class="dot" aria-hidden="true"></span><span id="stateText">正在连接采集器</span></div>
+        </div>
+        <div class="topBarActions">
+          <button id="pauseView" aria-pressed="false">暂停刷新</button>
+          <button id="openSettings">设置</button>
+        </div>
       </div>
     </header>
-    <div id="connectionHint" class="message" hidden role="status"></div>
-    <main id="mainContent" tabindex="-1">
+    <main id="mainContent" class="contentFrame" tabindex="-1">
+      <div id="connectionHint" class="message" hidden role="status"></div>
       <section id="overviewPanel" aria-labelledby="overviewTitle">
-        <div class="pageHeading"><div><h1 id="overviewTitle" tabindex="-1">实时概览</h1><p>仅统计代理流量，关闭网页后继续记录。</p></div></div>
+        <h1 class="pageHeading" id="overviewTitle" tabindex="-1">实时概览</h1>
         <div class="metrics" aria-label="流量概览">
           <div><span class="label">今日已记录</span><strong class="value" id="usageToday">—</strong><span class="secondary" id="usageTodaySplit"></span></div>
           <div><span class="label">本月已记录</span><strong class="value" id="usageMonth">—</strong><span class="secondary" id="usageMonthSplit"></span></div>
           <div><span class="label">当前速度</span><strong class="value" id="speed">—</strong><span class="secondary" id="speedDetail">等待采样</span></div>
-          <div><span class="label">代理连接</span><strong class="value" id="active">—</strong><span class="secondary">当前活跃</span></div>
+          <div><span class="label">活跃代理连接</span><strong class="value" id="active">—</strong></div>
         </div>
         <p id="usageSummaryError" class="message" role="status" hidden></p>
         <div class="overviewGrid">
@@ -56,10 +57,9 @@
             </table></div>
           </section>
         </div>
-        <div class="overviewFooter"><a href="#usage">查看日月用量</a><a href="#history">查找历史连接</a></div>
       </section>
       <section id="usagePanel" aria-labelledby="usageTitle" hidden>
-        <div class="pageHeading"><div><h1 id="usageTitle" tabindex="-1">日月用量</h1><p>按本机日期汇总已记录的代理流量。</p></div></div>
+        <h1 class="pageHeading" id="usageTitle" tabindex="-1">日月用量</h1>
         <section class="panel" aria-label="用量图表">
           <div class="panelHeading"><h2>用量趋势</h2><div class="usageLegend"><span class="up">上传</span><span class="down">下载</span></div></div>
           <div class="toolbar usageControls">
@@ -80,22 +80,23 @@
           <div id="usageBars" class="usageBars" aria-label="用量柱状图"></div>
           <div id="usageReadout" class="chartReadout" role="status">正在读取用量…</div>
         </section>
-        <details id="usagePrograms" class="panel" hidden><summary id="usageProgramTitle">程序排行</summary>
-          <p>排行依据仍保留的明细，合计可能少于日月汇总。</p>
+        <section id="usagePrograms" class="panel" aria-labelledby="usageProgramTitle" hidden>
+          <h2 id="usageProgramTitle" tabindex="-1">程序排行</h2>
+          <p class="secondary">仅统计保留的明细。</p>
           <div class="recentTable" tabindex="0" role="region" aria-label="程序排行"><table>
             <thead><tr><th scope="col">程序</th><th scope="col">上传</th><th scope="col">下载</th><th scope="col">合计</th></tr></thead><tbody id="usageProgramRows"></tbody>
           </table></div>
-        </details>
+        </section>
         <section class="panel" aria-labelledby="usageTableTitle">
           <div class="panelHeading"><h2 id="usageTableTitle">用量明细</h2></div>
           <div class="recentTable" tabindex="0" role="region" aria-label="用量明细，可横向滚动"><table>
             <thead><tr><th scope="col">日期</th><th scope="col">上传</th><th scope="col">下载</th><th scope="col">合计</th><th scope="col">记录情况</th></tr></thead><tbody id="usageRows"></tbody>
           </table></div>
-          <details class="supportDetails"><summary>统计口径</summary><p>每日汇总长期保留。旧数据由现存明细回填，可能不完整。恢复采集后的增量记入恢复日。此数据不等同于订阅账单。</p></details>
+          <p class="secondary">按本机日期统计代理流量。旧明细回填可能不完整。</p>
         </section>
       </section>
       <section id="historyPanel" aria-labelledby="historyTitle" hidden>
-        <div class="pageHeading"><div><h1 id="historyTitle" tabindex="-1">历史明细</h1><p>按目标、程序和代理节点查找已有记录。</p></div></div>
+        <h1 class="pageHeading" id="historyTitle" tabindex="-1">历史明细</h1>
         <div class="panel rangePanel" id="rangeStatus" aria-describedby="rangeHelp">
           <div><span class="label">统计范围</span><h2 id="rangeTitle">正在读取…</h2><p id="viewLabel"></p></div>
           <div><span class="label" id="totalLabel">累计代理流量</span><strong id="total" class="value">—</strong><span id="directions" class="secondary"></span></div>
@@ -124,31 +125,33 @@
         </section>
       </section>
       <section id="diagnosticsPanel" aria-labelledby="diagnosticsTitle" hidden>
-        <div class="pageHeading"><div><h1 id="diagnosticsTitle" tabindex="-1">诊断与存储</h1><p>查看采集健康、记录完整性与存储情况。</p></div></div>
-        <section class="panel"><h2>采集状态</h2><p id="quality">等待读取采样信息…</p><p>未识别程序流量 <strong id="unknown">—</strong>（当前历史统计范围）</p><p id="diagnostics"></p>
-          <details class="supportDetails"><summary>最近事件</summary><div id="events"></div></details>
-          <details class="supportDetails"><summary>采样与统计口径</summary><p>采集器统计观察到的代理字节。短连接、休眠或暂停采集期间可能漏记；采集恢复后观察到的增量记在恢复时间。IP 可能是 DNS 映射地址。趋势图以分钟为单位，空白表示无采样，零表示已采样且无新增流量。</p></details>
+        <h1 class="pageHeading" id="diagnosticsTitle" tabindex="-1">诊断与存储</h1>
+        <section class="panel"><div class="panelHeading"><h2>采集状态</h2><span class="secondary" id="updated"></span></div>
+          <p id="quality">等待读取采样信息…</p><p>未识别程序流量 <strong id="unknown">—</strong>（当前历史统计范围）</p><p id="diagnostics"></p>
         </section>
         <section class="panel"><h2>记录与存储</h2><p id="storageStatus">正在读取存储状态…</p></section>
-        <details class="panel"><summary id="alertSummary">大流量提醒</summary><p>提醒按单个程序的上传和下载合计判断。</p><div id="alertList"></div><button id="alertSettings">设置提醒阈值</button></details>
+        <section class="panel" aria-labelledby="eventsTitle"><h2 id="eventsTitle">最近事件</h2><div id="events" tabindex="0"></div></section>
+        <section class="panel" aria-labelledby="alertSummary">
+          <div class="panelHeading"><h2 id="alertSummary">大流量提醒</h2><button id="alertSettings">设置提醒</button></div>
+          <div id="alertList" tabindex="0"></div>
+        </section>
       </section>
     </main>
   </div>
 </div>
 <dialog id="detail" aria-labelledby="detailTitle">
   <div class="dialogHeading"><h2 id="detailTitle">连接归属详情</h2><button id="close">关闭</button></div>
-  <p>汇总行显示最近一次记录的 PID。连接历史可能含有观察起点前的记录。</p>
+  <p class="secondary">连接记录可能早于当前观察起点。</p>
   <div id="detailSummary"></div><details><summary>原始记录</summary><pre id="detailText"></pre></details>
 </dialog>
 <dialog id="settingsDialog" aria-labelledby="settingsTitle">
   <div class="dialogHeading"><h2 id="settingsTitle">连接与存储设置</h2><button id="closeSettings">关闭</button></div>
-  <p>请填写 Clash 的控制接口地址。若已有 Secret，留空会保留它。</p>
   <p id="settingsLoad" role="status" hidden></p>
 <form id="settingsForm"><fieldset class="settingsGrid"><legend>采集连接</legend>
 <label>连接方式<select id="mode"><option value="auto">自动：先管道，再 HTTP</option><option value="http">HTTP · 普通 Clash / CFW</option><option value="pipe">Windows 命名管道</option></select></label>
 <label>本机控制接口<input id="endpoint" type="url" required placeholder="http://127.0.0.1:9090"></label>
 <label>管道名（留空自动识别）<input id="pipe" placeholder="例如 mihomo，不含路径前缀"></label>
-<label>接口 Secret<input id="secret" type="password" autocomplete="new-password" placeholder="未设置可留空"></label>
+<label>接口 Secret<input id="secret" type="password" autocomplete="new-password" placeholder="留空保留现有 Secret"></label>
 <label><input id="clear_secret" type="checkbox">清除已保存的 Secret</label>
 <label>采样间隔（秒）<input id="interval" type="number" min="1" max="10" required></label>
 </fieldset><fieldset class="settingsGrid"><legend>存储与保留</legend><label>CSV 保留天数<input id="csv_days" type="number" min="1" max="365" required></label>
@@ -156,7 +159,7 @@
 <label>连接身份明细保留天数<input id="connection_days" type="number" min="1" max="30" required></label>
 <label>每日目标汇总保留天数<input id="total_days" type="number" min="7" max="365" required></label>
 <label>数据库容量目标（MiB）<input id="target_mb" type="number" min="64" max="2048" required></label>
-</fieldset><fieldset class="settingsGrid"><legend>流量提醒</legend><label class="checkLabel"><input id="alert_enabled" type="checkbox">开启大流量提醒（默认关闭）</label><label>提醒窗口（分钟）<input id="alert_window" type="number" min="1" max="60" required></label><label>单个程序流量阈值（MiB）<input id="alert_mb" type="number" min="1" max="102400" required></label></fieldset><details><summary>存储限制说明</summary><p>CSV 每天 / 约 32 MiB 分卷，达到期限或容量后自动删除最旧文件；全程累计字节保留。数据库另有限额：连接 5 万条、每日目标组合 10 万条、事件 2 千条，每分钟清理，可能提前淘汰旧明细。容量目标不是整个目录的硬上限，临时文件可能使占用短暂超过目标。</p></details>
+</fieldset><fieldset class="settingsGrid"><legend>流量提醒</legend><label class="checkLabel"><input id="alert_enabled" type="checkbox">开启大流量提醒</label><label>提醒窗口（分钟）<input id="alert_window" type="number" min="1" max="60" required></label><label>单个程序流量阈值（MiB）<input id="alert_mb" type="number" min="1" max="102400" required></label></fieldset>
 <p id="secretState"></p><div class="toolbar"><button type="button" id="testSettings">测试连接</button><button type="submit" class="primaryButton">保存并应用</button></div><p id="settingsResult" role="status"></p></form>
 </dialog>
 <script defer src="/trend-chart.js"></script>

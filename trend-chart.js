@@ -44,16 +44,27 @@
     save(){try{localStorage.setItem('proxy-monitor-chart',JSON.stringify({range:this.range,log:this.log}))}catch{}}
     update(points){const bucket=this.selected===null?null:this.data?.[this.selected]?.bucket;this.points=points||[];this.draw(bucket)}
     draw(bucket){
-      this.data=this.points.slice(-this.range);const n=this.data.length;this.width=Math.max(300,this.canvas.clientWidth);const height=210;this.svg.setAttribute('viewBox',`0 0 ${this.width} ${height}`);this.plot={left:76,right:this.width-18,top:30,bottom:170};const p=this.plot;
+      this.data=this.points.slice(-this.range);
+      const n=this.data.length;
+      this.width=Math.max(240,this.canvas.clientWidth);
+      const height=this.svg.clientHeight || 210;
+      const narrow=this.width<420;
+      this.svg.setAttribute('viewBox',`0 0 ${this.width} ${height}`);
+      this.plot={left:narrow?60:76,right:this.width-16,top:28,bottom:height-31};
+      const p=this.plot;
       const series=Object.keys(this.visible).filter(f=>this.visible[f]);this.axis=scale(this.data.flatMap(d=>series.map(f=>d[f])),this.log);
       this.x=i=>p.left+i*(p.right-p.left)/Math.max(1,n-1);this.y=v=>p.bottom-this.axis.fraction(v)*(p.bottom-p.top);
       const unit=this.axis.maximum>=1048576?1048576:this.axis.maximum>=1024?1024:1,unitName=unit===1048576?'MiB':unit===1024?'KiB':'B';
       let html=`<text x="${p.left}" y="14" class="axisLabel">${this.log?'流量 / 分钟 · 对数刻度':unitName+' / 分钟'}</text>`;
       for(const tick of this.axis.ticks){const y=this.y(tick),label=this.log?this.bytes(tick):Number((tick/unit).toPrecision(3));html+=`<line x1="${p.left}" x2="${p.right}" y1="${y}" y2="${y}" class="chartGrid"/><text x="${p.left-12}" y="${y+4}" text-anchor="end" class="axisLabel">${escape(label)}</text>`}
-      for(let j=0;j<5 && n;j++){const i=Math.round(j*(n-1)/4),x=this.x(i);html+=`<text x="${x}" y="197" text-anchor="${j===0?'start':j===4?'end':'middle'}" class="axisLabel">${escape(this.time(this.data[i].bucket))}</text>`}
+      const tickCount=Math.min(n,narrow?3:5);
+      for(let j=0;j<tickCount;j++){
+        const i=Math.round(j*(n-1)/Math.max(1,tickCount-1)),x=this.x(i);
+        html+=`<text x="${x}" y="${height-9}" text-anchor="${j===0?'start':j===tickCount-1?'end':'middle'}" class="axisLabel">${escape(this.time(this.data[i].bucket))}</text>`;
+      }
       for(const field of series){let run=[];const flush=()=>{if(run.length>1)html+=`<polyline points="${run.join(' ')}" fill="none" stroke="${COLORS[field]}" stroke-width="2.2" ${field==='up'?'stroke-dasharray="6 4"':''} stroke-linejoin="round"/>`;run=[]};
         this.data.forEach((d,i)=>{if(d[field]===null || !Number.isFinite(d[field])){flush();return}const x=this.x(i),y=this.y(d[field]);run.push(`${x},${y}`);html+=field==='up'?`<rect x="${x-2.5}" y="${y-2.5}" width="5" height="5" fill="${COLORS[field]}"/>`:`<circle cx="${x}" cy="${y}" r="2.5" fill="${COLORS[field]}"/>`});flush()}
-      if(!this.data.some(d=>d.up!==null && Number.isFinite(d.up)))html+=`<text x="${(p.left+p.right)/2}" y="110" text-anchor="middle" class="axisLabel">此时间范围暂无有效采样</text>`;
+      if(!this.data.some(d=>d.up!==null && Number.isFinite(d.up)))html+=`<text x="${(p.left+p.right)/2}" y="${(p.top+p.bottom)/2}" text-anchor="middle" class="axisLabel">暂无有效采样</text>`;
       html+='<g class="selectionLayer"></g>';this.svg.innerHTML=html;
       if(bucket!==undefined && bucket!==null){const i=this.data.findIndex(d=>d.bucket===bucket);this.selected=i<0?null:i;if(i<0)this.pinned=false}
       this.showSelection();
@@ -64,7 +75,14 @@
     select(index){this.selected=index===null?null:Math.max(0,Math.min(this.data.length-1,index));this.showSelection()}
     showSelection(){
       const layer=this.svg.querySelector('.selectionLayer');if(!layer)return;layer.innerHTML='';this.unpin.hidden=!this.pinned;
-      if(this.selected===null || !this.data[this.selected]){this.tooltip.hidden=true;this.readout.hidden=false;this.readout.textContent='移动鼠标查看读数 · 点击固定 · 方向键也可查看';return}
+      if(this.selected===null || !this.data[this.selected]){
+        this.tooltip.hidden=true;
+        this.readout.hidden=false;
+        const latest=this.data.at(-1);
+        this.readout.textContent=latest && Number.isFinite(latest.up) && Number.isFinite(latest.down)
+          ? `${this.time(latest.bucket)}  上传 ${this.bytes(latest.up)} / 下载 ${this.bytes(latest.down)}` : '';
+        return;
+      }
       const d=this.data[this.selected],x=this.x(this.selected),missing=d.up===null || d.down===null;
       layer.innerHTML=`<line x1="${x}" x2="${x}" y1="${this.plot.top}" y2="${this.plot.bottom}" class="crosshair"/>`+['up','down'].filter(f=>this.visible[f] && Number.isFinite(d[f])).map(f=>`<circle cx="${x}" cy="${this.y(d[f])}" r="4.5" fill="white" stroke="${COLORS[f]}" stroke-width="2"/>`).join('');
       const latest=d.bucket===this.points[this.points.length-1]?.bucket;
