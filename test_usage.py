@@ -56,5 +56,23 @@ class UsageTests(unittest.TestCase):
             self.assertEqual(usage_stats.programs(db,'bad'),[])
             self.assertEqual(usage_stats.programs(db,'2000-01'),[])
 
+    def test_program_ranking_follows_retained_totals_after_upgrade(self):
+        with monitor.connect(self.db) as db:
+            db.execute('DROP INDEX ix_totals_day_program_bytes')
+            db.executemany('INSERT INTO totals VALUES(?,?,?,?,?,?,?)', [
+                ('2024-02-28','a','{"process":"browser.exe"}',10,20,0,0),
+                ('2024-02-29','b','{"process":"browser.exe"}',40,5,0,0),
+                ('2024-02-29','c','{}',50,35,0,0),
+                ('2024-03-01','d','{"process":"browser.exe"}',100,200,0,0),
+            ])
+            usage_stats.initialize(db)
+            self.assertEqual(usage_stats.programs(db,'2024-02'), [
+                {'process':'未知程序','down':50,'up':35},
+                {'process':'browser.exe','down':50,'up':25},
+            ])
+            self.assertEqual(usage_stats.programs(db,'2024-02-29')[1]['up'],5)
+            db.execute("DELETE FROM totals WHERE day='2024-02-28'")
+            self.assertEqual(usage_stats.programs(db,'2024-02')[1]['down'],40)
+
 
 if __name__=='__main__':unittest.main()

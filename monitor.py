@@ -338,7 +338,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if route.path=='/':
                 body=(ASSETS/'index.html').read_bytes(); mime='text/html; charset=utf-8'
-            elif route.path in ('/trend-chart.js','/ui.css'):
+            elif route.path in ('/trend-chart.js','/dashboard.js','/history-ui.js','/usage-ui.js','/ui.css'):
                 body=(ASSETS/route.path[1:]).read_bytes();mime='text/javascript; charset=utf-8' if route.path.endswith('.js') else 'text/css; charset=utf-8'
             elif route.path=='/api/usage':
                 with connect() as db:

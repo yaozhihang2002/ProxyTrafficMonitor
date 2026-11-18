@@ -1,95 +1,167 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>代理流量观察台</title><link rel="stylesheet" href="/ui.css"></head><body><main>
-<header><div><div class="eyebrow">v0.2.5</div><h1>代理流量观察台</h1><p>仅记录代理流量 · 关闭网页仍继续记录</p></div><div class="status" id="status"><span class="dot"></span><span id="stateText">正在连接本地采集器…</span></div></header>
-<section id="rangeStatus" class="rangeStatus" aria-label="当前统计范围" aria-describedby="rangeHelp"><div class="rangeSummary"><div class="rangeCaption">当前统计范围</div><strong id="rangeTitle">正在读取统计范围…</strong><div id="viewLabel">请等待后台确认当前模式</div></div><div class="rangeActions"><button id="startView">从现在开始</button><button id="allView">查看全部</button></div><div class="rangeHelp" id="rangeHelp">切换范围不会删除历史数据。</div></section>
-<section class="metrics" aria-label="累计统计"><div class="metric"><div class="label" id="totalLabel">累计代理流量 · 自开始记录</div><div class="value" id="total">—</div><div class="sub" id="directions">上传 — · 下载 —</div></div><div class="metric"><div class="label">当前传输速度</div><div class="value" id="speed">—</div><div class="sub" id="speedDetail">上传 — · 下载 —</div></div><div class="metric"><div class="label">当前代理连接</div><div class="value" id="active">—</div><div class="sub">实时连接</div></div><div class="metric"><div class="label">未识别程序流量</div><div class="value" id="unknown">—</div><div class="sub">归属待核实</div><span id="quality" hidden></span></div></section>
-<div id="connectionHint" class="diagnosisBox" hidden role="status"></div>
-<section class="activityPanel" id="usagePanel" aria-label="每日与每月用量"><div class="recentHeading"><strong>用量统计</strong><span class="secondary">独立于上方观察范围 · 本地日期</span></div><div class="usageCards"><div>今日已记录<strong id="usageToday">—</strong><span id="usageTodaySplit"></span></div><div>本月已记录<strong id="usageMonth">—</strong><span id="usageMonthSplit"></span></div></div><details id="usageDetails"><summary>查看每日 / 每月用量</summary><div class="recentHeading usageControls"><select id="usageMode" aria-label="用量统计周期"><option value="days">按日 · 所选月份</option><option value="months">按月 · 所选年份</option></select><label>选择月份 <input id="usageDate" type="month"></label><span class="secondary">橙色：上传 · 蓝色：下载</span></div><div id="usageScale" class="secondary"></div><div id="usageBars" class="usageBars" aria-label="用量柱状图"></div><div id="usageReadout" role="status">悬停或用 Tab 选择柱子，查看精确数值。</div><div class="recentTable"><table><thead><tr><th>日期</th><th>上传</th><th>下载</th><th>合计</th><th>记录情况</th></tr></thead><tbody id="usageRows"></tbody></table></div><details id="usagePrograms"><summary id="usageProgramTitle">点击柱子查看程序排行</summary><p class="secondary">仅当前仍保留的历史明细，可能少于日/月汇总；最多列出 100 个程序。</p><div class="recentTable"><table><thead><tr><th>程序</th><th>上传</th><th>下载</th><th>合计</th></tr></thead><tbody id="usageProgramRows"></tbody></table></div></details><p class="secondary">仅统计采集到的代理流量，并非订阅账单。旧数据由保留明细回填，可能不完整；未采集显示“无记录”。中断后恢复的增量归入恢复日。每日汇总长期保留。</p></details><p id="usageError" role="status" hidden></p></section>
-<section class="activityPanel" id="recentPanel"><div class="recentHeading"><strong id="programSummary">最近 5 分钟 · 程序增量</strong><span class="secondary">自动滚动窗口</span></div><div class="toolbar recentHeading"><button id="openSettings">连接与存储设置</button><button id="pauseView" aria-pressed="false">暂停网页刷新</button><label style="display:flex;align-items:center;gap:6px;white-space:nowrap">显示前 <input id="rowLimit" type="number" min="1" max="2000" step="1" value="50" required aria-label="显示条数" title="输入 1—2000，按流量从高到低展示" style="width:86px"> 项</label><select id="recentSort" aria-label="最近活动排序"><option value="bytes">按约 5 分钟增量</option><option value="rate">按当前速度</option></select></div><div class="recentTable"><table><thead><tr><th>程序 / 父进程</th><th class="number">约 5 分钟</th><th class="number">当前速度</th></tr></thead><tbody id="recentRows"></tbody></table></div></section>
-<details class="activityPanel" id="activityPanel"><summary id="activitySummary">最近活动 · 等待采样</summary><div class="activityBody"><div><div class="chartHeader"><strong>流量趋势</strong></div><div id="trend"></div></div></div><details><summary>统计说明与采样边界</summary><p id="activityScope"></p><p>图表空白表示无有效采样，零值表示已经采样但没有新增量；当前分钟仍在累计。采集中断后恢复的增量归入恢复分钟，无法还原中断期间的精确时间。“放大小流量”使用 log(1 + 字节数 / 1024) 对数刻度；悬浮读数始终为真实流量。</p></details><details><summary id="alertSummary">大流量提醒 · 默认关闭</summary><p class="secondary">按程序统计上传与下载之和；开启后开始累计，不补发历史提醒。持续超限只提醒一次，回落后重新越限才会再次提醒，至少间隔 10 分钟。</p><div id="alertList" class="alertList"></div><button id="alertSettings">设置提醒阈值</button></details></details>
-<details class="supportDetails" id="historyPanel"><summary>历史明细 · 按需加载</summary><p class="secondary">跟随顶部累计范围；这里的数值不是最近 5 分钟增量。</p><div class="toolbar"><input id="search" type="search" aria-label="搜索程序、IP、域名或节点" placeholder="搜索程序、IP、域名或代理节点"><select id="group" aria-label="分组方式"><option value="detail">连接目标明细</option><option value="process">按程序与父进程汇总</option><option value="host">按域名 / IP 汇总</option><option value="node">按代理节点汇总</option></select><label style="display:flex;align-items:center;gap:5px;white-space:nowrap"><input id="allRows" type="checkbox">全部项</label><input id="day" type="date" aria-label="按日期筛选"><button id="clearDay">全部日期</button><a class="button" id="export" href="/export.csv">导出 CSV</a></div>
-<div class="tablebox" tabindex="0" role="region" aria-label="流量明细，可滚动查看"><table><thead><tr><th id="headTarget">目标 / IP</th><th>程序 / 父进程</th><th>代理节点</th><th class="number">上传</th><th class="number">下载</th><th class="number">合计 ↓</th><th>最近活动</th><th></th></tr></thead><tbody id="rows"><tr><td colspan="8" class="empty">正在读取本地记录…</td></tr></tbody></table></div>
-<div class="foot"><span id="count">—</span><span id="updated">每 2 秒刷新 · 累计统计不会随页面关闭而清零</span></div>
-</details>
-<details class="supportDetails"><summary>记录与存储</summary><div class="note" id="storageStatus">正在读取 CSV 与数据库状态…</div></details><details class="supportDetails"><summary>统计说明</summary><div class="note">统计口径：采集器观察到的代理连接字节数，不是订阅服务商账单。约每秒采样，短连接可能遗漏；首次启动以前的流量不追溯。IP 字段保留核心原始值，可能是 DNS 映射地址，不能一律当成真实服务器 IP。机器休眠或采集器停止期间无法完整记录。</div></details>
-<details><summary>诊断与日志</summary><p id="diagnostics"></p><div id="events"></div></details>
-</main><dialog id="detail"><button class="close" id="close">关闭</button><h2>流量归属记录</h2><p>汇总行的 PID 为最近记录；下方连接历史保留各次 PID 和进程启动时间，可能包含观察起点之前的记录。</p><div id="detailSummary"></div><details><summary>原始归属数据</summary><pre id="detailText"></pre></details></dialog>
-<dialog id="settingsDialog"><button class="close" id="closeSettings">关闭</button><h2>连接与存储设置</h2>
-<p>不需要订阅链接。填写的是 Clash 控制接口，不是 HTTP/SOCKS 代理端口。</p>
-<form id="settingsForm"><div class="settingsGrid">
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>代理流量观察台</title>
+  <link rel="stylesheet" href="/ui.css">
+</head>
+<body>
+<a class="skipLink" href="#mainContent">跳到页面内容</a>
+<div class="appShell" id="appShell">
+  <aside class="sidebar" aria-label="侧边栏">
+    <div class="brand"><span class="meterMark" aria-hidden="true"><i></i><i></i><i></i></span><span>代理流量观察台</span></div>
+    <nav class="navigation" id="navigation" aria-label="主要导航">
+      <a href="#overview" aria-current="page" aria-label="实时概览" title="实时概览"><span>实时概览</span><span class="shortLabel" aria-hidden="true">概览</span></a>
+      <a href="#usage" aria-label="日月用量" title="日月用量"><span>日月用量</span><span class="shortLabel" aria-hidden="true">用量</span></a>
+      <a href="#history" aria-label="历史明细" title="历史明细"><span>历史明细</span><span class="shortLabel" aria-hidden="true">明细</span></a>
+      <a href="#diagnostics" aria-label="诊断与存储" title="诊断与存储"><span>诊断与存储</span><span class="shortLabel" aria-hidden="true">诊断</span></a>
+    </nav>
+    <div class="sidebarEnd"><span id="versionLabel">本地监测</span></div>
+  </aside>
+  <div class="workspace">
+    <header class="topBar">
+      <div class="topBarStart">
+        <button id="sidebarToggle" type="button" aria-controls="navigation" aria-expanded="true">收起侧栏</button>
+        <div class="status" id="status" role="status"><span class="dot" aria-hidden="true"></span><span id="stateText">正在连接采集器</span></div>
+        <span class="secondary" id="updated"></span>
+      </div>
+      <div class="topBarActions">
+        <button id="pauseView" aria-pressed="false">暂停刷新</button>
+        <button id="openSettings">设置</button>
+      </div>
+    </header>
+    <div id="connectionHint" class="message" hidden role="status"></div>
+    <main id="mainContent" tabindex="-1">
+      <section id="overviewPanel" aria-labelledby="overviewTitle">
+        <div class="pageHeading"><div><h1 id="overviewTitle" tabindex="-1">实时概览</h1><p>仅统计代理流量，关闭网页后继续记录。</p></div></div>
+        <div class="metrics" aria-label="流量概览">
+          <div><span class="label">今日已记录</span><strong class="value" id="usageToday">—</strong><span class="secondary" id="usageTodaySplit"></span></div>
+          <div><span class="label">本月已记录</span><strong class="value" id="usageMonth">—</strong><span class="secondary" id="usageMonthSplit"></span></div>
+          <div><span class="label">当前速度</span><strong class="value" id="speed">—</strong><span class="secondary" id="speedDetail">等待采样</span></div>
+          <div><span class="label">代理连接</span><strong class="value" id="active">—</strong><span class="secondary">当前活跃</span></div>
+        </div>
+        <p id="usageSummaryError" class="message" role="status" hidden></p>
+        <div class="overviewGrid">
+          <section class="panel" aria-labelledby="trendTitle">
+            <div class="panelHeading"><h2 id="trendTitle">流量趋势</h2></div>
+            <div id="trend"></div>
+          </section>
+          <section class="panel" id="recentPanel" aria-labelledby="recentTitle">
+            <div class="panelHeading"><div><h2 id="recentTitle">最近活动</h2><p id="programSummary">最近 5 分钟</p></div>
+              <select id="recentSort" aria-label="最近活动排序"><option value="bytes">按增量</option><option value="rate">按速度</option></select></div>
+            <div class="recentTable" tabindex="0" role="region" aria-label="最近活动列表"><table>
+              <thead><tr><th scope="col">程序 / 父进程</th><th scope="col" class="number">近 5 分钟</th><th scope="col" class="number">当前速度</th></tr></thead>
+              <tbody id="recentRows"><tr><td colspan="3" class="empty">正在读取近期流量…</td></tr></tbody>
+            </table></div>
+          </section>
+        </div>
+        <div class="overviewFooter"><a href="#usage">查看日月用量</a><a href="#history">查找历史连接</a></div>
+      </section>
+      <section id="usagePanel" aria-labelledby="usageTitle" hidden>
+        <div class="pageHeading"><div><h1 id="usageTitle" tabindex="-1">日月用量</h1><p>按本机日期汇总已记录的代理流量。</p></div></div>
+        <section class="panel" aria-label="用量图表">
+          <div class="panelHeading"><h2>用量趋势</h2><div class="usageLegend"><span class="up">上传</span><span class="down">下载</span></div></div>
+          <div class="toolbar usageControls">
+            <select id="usageMode" aria-label="统计周期"><option value="days">按日</option><option value="months">按月</option></select>
+            <button id="usagePrev" type="button">上一月</button>
+            <label><span class="srOnly">选择月份</span><input id="usageDate" type="month"></label>
+            <label hidden><span class="srOnly">选择年份</span><input id="usageYear" type="number" min="1900" max="9999" step="1"></label>
+            <button id="usageNext" type="button">下一月</button>
+            <button id="usageCurrent" type="button">回到本月</button>
+          </div>
+          <p id="usageError" class="message" role="status" hidden></p>
+          <div id="usagePeriodTotal" class="periodTotal" hidden>
+            <span id="usagePeriodLabel" class="label"></span>
+            <strong id="usagePeriodValue" class="value">—</strong>
+            <span id="usagePeriodSplit" class="secondary"></span>
+          </div>
+          <div id="usageScale" class="secondary"></div>
+          <div id="usageBars" class="usageBars" aria-label="用量柱状图"></div>
+          <div id="usageReadout" class="chartReadout" role="status">正在读取用量…</div>
+        </section>
+        <details id="usagePrograms" class="panel" hidden><summary id="usageProgramTitle">程序排行</summary>
+          <p>排行依据仍保留的明细，合计可能少于日月汇总。</p>
+          <div class="recentTable" tabindex="0" role="region" aria-label="程序排行"><table>
+            <thead><tr><th scope="col">程序</th><th scope="col">上传</th><th scope="col">下载</th><th scope="col">合计</th></tr></thead><tbody id="usageProgramRows"></tbody>
+          </table></div>
+        </details>
+        <section class="panel" aria-labelledby="usageTableTitle">
+          <div class="panelHeading"><h2 id="usageTableTitle">用量明细</h2></div>
+          <div class="recentTable" tabindex="0" role="region" aria-label="用量明细，可横向滚动"><table>
+            <thead><tr><th scope="col">日期</th><th scope="col">上传</th><th scope="col">下载</th><th scope="col">合计</th><th scope="col">记录情况</th></tr></thead><tbody id="usageRows"></tbody>
+          </table></div>
+          <details class="supportDetails"><summary>统计口径</summary><p>每日汇总长期保留。旧数据由现存明细回填，可能不完整。恢复采集后的增量记入恢复日。此数据不等同于订阅账单。</p></details>
+        </section>
+      </section>
+      <section id="historyPanel" aria-labelledby="historyTitle" hidden>
+        <div class="pageHeading"><div><h1 id="historyTitle" tabindex="-1">历史明细</h1><p>按目标、程序和代理节点查找已有记录。</p></div></div>
+        <div class="panel rangePanel" id="rangeStatus" aria-describedby="rangeHelp">
+          <div><span class="label">统计范围</span><h2 id="rangeTitle">正在读取…</h2><p id="viewLabel"></p></div>
+          <div><span class="label" id="totalLabel">累计代理流量</span><strong id="total" class="value">—</strong><span id="directions" class="secondary"></span></div>
+          <div class="rangeActions"><button id="startView" disabled>从现在开始</button><button id="allView" disabled>查看全部</button></div>
+          <p id="rangeHelp" class="srOnly">切换范围会保留历史记录。</p>
+          <p id="rangeMessage" class="message" role="status" hidden></p>
+        </div>
+        <section class="panel" aria-label="查询连接记录">
+          <div class="toolbar historyFilters">
+            <input id="search" type="search" aria-label="搜索程序、IP、域名或节点" placeholder="搜索程序、IP、域名或节点">
+            <select id="group" aria-label="分组方式"><option value="detail">连接目标明细</option><option value="process">按程序与父进程</option><option value="host">按域名 / IP</option><option value="node">按代理节点</option></select>
+            <input id="day" type="date" aria-label="按日期筛选">
+            <button id="clearDay">全部日期</button>
+          </div>
+          <div class="toolbar historyActions">
+            <label>显示前 <input id="rowLimit" type="number" min="1" max="2000" step="1" value="50" required aria-label="显示条数"> 项</label>
+            <label><input id="allRows" type="checkbox"> 全部项</label>
+            <button id="historyReload">更新明细</button><a class="button" id="export" href="/export.csv">导出 CSV</a>
+          </div>
+          <p id="historyMessage" class="message" role="status" hidden></p>
+          <div class="tablebox" tabindex="0" role="region" aria-label="流量明细，可横向滚动"><table>
+            <thead><tr><th id="headTarget" scope="col">目标 / IP</th><th scope="col">程序 / 父进程</th><th scope="col">代理节点</th><th scope="col" class="number">上传</th><th scope="col" class="number">下载</th><th scope="col" class="number">合计</th><th scope="col">最近活动</th><th scope="col"><span class="srOnly">操作</span></th></tr></thead>
+            <tbody id="rows"><tr><td colspan="8" class="empty">正在读取连接记录…</td></tr></tbody>
+          </table></div>
+          <p class="foot" id="count"></p>
+        </section>
+      </section>
+      <section id="diagnosticsPanel" aria-labelledby="diagnosticsTitle" hidden>
+        <div class="pageHeading"><div><h1 id="diagnosticsTitle" tabindex="-1">诊断与存储</h1><p>查看采集健康、记录完整性与存储情况。</p></div></div>
+        <section class="panel"><h2>采集状态</h2><p id="quality">等待读取采样信息…</p><p>未识别程序流量 <strong id="unknown">—</strong>（当前历史统计范围）</p><p id="diagnostics"></p>
+          <details class="supportDetails"><summary>最近事件</summary><div id="events"></div></details>
+          <details class="supportDetails"><summary>采样与统计口径</summary><p>采集器统计观察到的代理字节。短连接、休眠或暂停采集期间可能漏记；采集恢复后观察到的增量记在恢复时间。IP 可能是 DNS 映射地址。趋势图以分钟为单位，空白表示无采样，零表示已采样且无新增流量。</p></details>
+        </section>
+        <section class="panel"><h2>记录与存储</h2><p id="storageStatus">正在读取存储状态…</p></section>
+        <details class="panel"><summary id="alertSummary">大流量提醒</summary><p>提醒按单个程序的上传和下载合计判断。</p><div id="alertList"></div><button id="alertSettings">设置提醒阈值</button></details>
+      </section>
+    </main>
+  </div>
+</div>
+<dialog id="detail" aria-labelledby="detailTitle">
+  <div class="dialogHeading"><h2 id="detailTitle">连接归属详情</h2><button id="close">关闭</button></div>
+  <p>汇总行显示最近一次记录的 PID。连接历史可能含有观察起点前的记录。</p>
+  <div id="detailSummary"></div><details><summary>原始记录</summary><pre id="detailText"></pre></details>
+</dialog>
+<dialog id="settingsDialog" aria-labelledby="settingsTitle">
+  <div class="dialogHeading"><h2 id="settingsTitle">连接与存储设置</h2><button id="closeSettings">关闭</button></div>
+  <p>请填写 Clash 的控制接口地址。若已有 Secret，留空会保留它。</p>
+  <p id="settingsLoad" role="status" hidden></p>
+<form id="settingsForm"><fieldset class="settingsGrid"><legend>采集连接</legend>
 <label>连接方式<select id="mode"><option value="auto">自动：先管道，再 HTTP</option><option value="http">HTTP · 普通 Clash / CFW</option><option value="pipe">Windows 命名管道</option></select></label>
 <label>本机控制接口<input id="endpoint" type="url" required placeholder="http://127.0.0.1:9090"></label>
 <label>管道名（留空自动识别）<input id="pipe" placeholder="例如 mihomo，不含路径前缀"></label>
 <label>接口 Secret<input id="secret" type="password" autocomplete="new-password" placeholder="未设置可留空"></label>
 <label><input id="clear_secret" type="checkbox">清除已保存的 Secret</label>
 <label>采样间隔（秒）<input id="interval" type="number" min="1" max="10" required></label>
-<label>CSV 保留天数<input id="csv_days" type="number" min="1" max="365" required></label>
+</fieldset><fieldset class="settingsGrid"><legend>存储与保留</legend><label>CSV 保留天数<input id="csv_days" type="number" min="1" max="365" required></label>
 <label>CSV 总容量（MiB）<input id="csv_budget_mb" type="number" min="64" max="10240" required></label>
 <label>连接身份明细保留天数<input id="connection_days" type="number" min="1" max="30" required></label>
 <label>每日目标汇总保留天数<input id="total_days" type="number" min="7" max="365" required></label>
 <label>数据库容量目标（MiB）<input id="target_mb" type="number" min="64" max="2048" required></label>
-<label class="checkLabel"><input id="alert_enabled" type="checkbox">开启大流量提醒（默认关闭）</label><label>提醒窗口（分钟）<input id="alert_window" type="number" min="1" max="60" required></label><label>单个程序流量阈值（MiB）<input id="alert_mb" type="number" min="1" max="102400" required></label></div><p>CSV 每天 / 约 32 MiB 分卷，达到期限或容量后自动删除最旧文件；全程累计字节保留。数据库另有限额：连接 5 万条、每日目标组合 10 万条、事件 2 千条，每分钟清理，可能提前淘汰旧明细。容量目标不是整个目录的硬上限，临时文件可能使占用短暂超过目标。</p>
-<p id="secretState"></p><div class="toolbar"><button type="button" id="testSettings">测试连接</button><button type="submit">保存并应用</button></div><p id="settingsResult" role="status"></p></form></dialog><script src="/trend-chart.js"></script><script>
-const $=s=>document.getElementById(s);let current=[],visible=[],busy=false,truncated=false,paused=false,recentData=null,recentLive=false;
-try{let saved=localStorage.getItem('proxy-monitor-row-limit');if(saved==='all')$('allRows').checked=true;else if(Number.isInteger(Number(saved))&&Number(saved)>=1&&Number(saved)<=2000)$('rowLimit').value=saved}catch{}
-const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function bytes(n){n=Number(n)||0;let u=0;while(n>=1024&&u<4){n/=1024;u++}return (u?n.toFixed(n>=100?1:2):n.toFixed(0))+' '+['B','KiB','MiB','GiB','TiB'][u]}
-const stamp=t=>t?new Date(t*1000).toLocaleString('zh-CN',{hour12:false}):'—';
-function params(){let p=new URLSearchParams();p.set("details",$("historyPanel").open?"1":"0");if($('search').value)p.set('q',$('search').value);if($('day').value)p.set('day',$('day').value);return p.toString()}
-function render(){let group=$('group').value;let rows=current;
- if(group!=='detail'){let map=new Map();for(const r of rows){let k=group==='process'?[r.path||r.process||'未知程序',r.parent_path||r.parent].join('|'):group==='host'?(r.host||r.ip||'未知目标'):(r.chains||[])[0]||'未知节点';if(!map.has(k))map.set(k,{...r,down:0,up:0,count:0,label:k,last_seen:0});let x=map.get(k);x.down+=r.down;x.up+=r.up;x.count++;x.last_seen=Math.max(x.last_seen,r.last_seen)}rows=[...map.values()]}
- rows.sort((a,b)=>(b.down+b.up)-(a.down+a.up));let limit=$('allRows').checked?2000:($('rowLimit').checkValidity()?Number($('rowLimit').value):50);visible=rows.slice(0,limit);let sum=rows.reduce((a,r)=>a+r.down+r.up,0);let largest=rows.length?rows[0].down+rows[0].up:1;
- $('count').textContent=`${rows.length} 项 · 显示 ${visible.length} 项（按流量排序） · 匹配明细合计 ${bytes(sum)}${truncated?" · 已截取前 2000 项，请搜索或按日期缩小范围；分组仅针对返回项":""}`;
- $('rows').innerHTML=rows.length?visible.map((r,i)=>{let target=group==='process'?(r.process||'未知程序'):group==='node'?(r.chains||[])[0]:(r.host||r.ip||'未提供域名');let secondary=group==='detail'?`${r.ip||'核心未提供 IP'} : ${r.port} · ${r.network}`:`${r.count} 个明细组合`;let known=r.binding==='socket';return `<tr><td><div class="primary">${esc(target)}</div><div class="secondary">${esc(secondary)}</div></td><td><div class="primary">${esc(group==='detail'||group==='process'?(r.process||'未知程序'):'程序合并统计')}</div><div class="secondary">${esc(group==='detail'||group==='process'?(r.parent||'父进程未知'):'切换明细查看归属')}${group==='detail'?' · PID '+esc(r.pid||'—'):''}</div>${group==='detail'?`<span class="tag ${known?'':'warning'}">${known?'端口与进程匹配':'归属待核实'}</span>`:''}</td><td><div>${esc(group==='detail'||group==='node'?(r.chains||[])[0]:'节点合并统计')}</div><div class="secondary">${esc(group==='detail'?(r.chains||[]).slice(1).join(' ← '):'分组累计')}</div></td><td class="number">${bytes(r.up)}</td><td class="number">${bytes(r.down)}</td><td class="number primary">${bytes(r.up+r.down)}<div class="smallbar"><span style="width:${100*(r.up+r.down)/largest}%"></span></div></td><td class="secondary">${esc(stamp(r.last_seen))}</td><td>${group==='detail'?`<button data-index="${i}" aria-label="查看归属详情">详情</button>`:''}</td></tr>`}).join(''):'<tr><td colspan="8" class="empty">暂无匹配记录。后台正在等待代理流量。</td></tr>';
- renderRecent();$('export').href='/export.csv?'+params();
-}
-async function refresh(force=false){if(busy||(!force&&(paused||$('detail').open)))return;busy=true;let received=false;try{let r=await fetch('/api/status?'+params(),{signal:AbortSignal.timeout(10000)});if(!r.ok){let e=Error('HTTP '+r.status);e.status=r.status;throw e}let d=await r.json(),m=d.meta,live=m.last_sample&&d.now-m.last_sample<Math.max(8,d.settings.interval*2+5)&&!m.error&&!d.runtime_error;received=true;current=d.rows;truncated=d.truncated;recentData=d.activity;recentLive=live&&d.activity.rate_valid;renderActivity(d);$('connectionHint').hidden=!d.diagnosis;if(d.diagnosis)$('connectionHint').textContent=d.diagnosis.title+'：'+d.diagnosis.help;$('rangeStatus').classList.toggle('observing',!!m.view_active);$('rangeTitle').textContent=m.view_active?'时间段观察 · 非全部累计':'全部累计';$('totalLabel').textContent=m.view_active?'本次观察流量 · 仅以下起点之后':'全部累计代理流量';$('viewLabel').textContent=m.view_active?(m.view_started?'从 '+stamp(m.view_started)+' 开始':'等待下一次有效采样建立起点…'):'从 '+stamp(m.started)+' 开始记录至今';$('rangeHelp').textContent=m.view_active?'顶部总量、明细和汇总导出仅统计观察起点后的增量。点击“查看全部”恢复全程累计；历史数据仍保留。':'顶部为全程累计；明细仍受保留期限及搜索/日期筛选影响。点击“从现在开始”可单独观察之后的流量。';$('startView').textContent=m.view_active?'重新从现在开始':'从现在开始';$('startView').setAttribute('aria-pressed',String(!!m.view_active));$('allView').setAttribute('aria-pressed',String(!m.view_active));$('allView').disabled=!m.view_active;$('status').classList.toggle('offline',!live);$('stateText').textContent=paused?'网页已暂停 · 后台继续记录':live?'后台正在记录':m.error?'采集异常 · 正在重连':m.last_sample?'采样延迟 · '+Math.round(Math.max(0,d.now-m.last_sample))+' 秒':'正在启动采集';$('total').textContent=bytes(d.total_down+d.total_up);$('directions').textContent=`上传 ${bytes(d.total_up)} · 下载 ${bytes(d.total_down)}`;$('speed').textContent=live?bytes(m.rate_up+m.rate_down)+'/s':'—';$('speedDetail').textContent=live?`↑ ${bytes(m.rate_up)}/s · ↓ ${bytes(m.rate_down)}/s`:'当前无有效采样';$('active').textContent=live?m.active:'—';$('unknown').textContent=bytes(m.unknown_bytes);$('quality').textContent=`${m.samples||0} 次采样 · ${m.gaps||0} 次间断`;$('updated').textContent='最后采样 '+stamp(m.last_sample);$('storageStatus').textContent=`持续 CSV：${m.csv_blocked?"文件被占用 / 写入受限，已转入数据库暂存，释放后自动补写。":""}待写 ${d.csv.pending_records} 条 / ${bytes(d.csv.pending_bytes)}。每 10 秒合并写入流量增量，${d.csv.files} 个分卷 / ${bytes(d.csv.bytes)}；最近写入 ${stamp(m.csv_last_write)}。目录：${d.csv.folder}。保留 ${d.settings.csv_days} 天，总容量 ${d.settings.csv_budget_mb} MiB，达到限制删除最旧分卷。数据库 ${bytes(d.storage.database_bytes+d.storage.wal_bytes+d.storage.shm_bytes)}；连接 ${d.settings.connection_days} 天，目标明细 ${d.settings.total_days} 天（也受条数/容量限制）。切换查看范围不会清空历史数据。${d.runtime_error?' 当前异常：'+d.runtime_error:''}`;$('diagnostics').textContent=`开始记录：${stamp(m.started)}。数据库：${d.database}。接口采样：${m.sample_ms||0} ms。入库处理：${d.pipeline?.processing_ms??'—'} ms；队列：${d.pipeline?.queue_depth??'—'}；处理延迟：${d.pipeline?.processing_lag?.toFixed(1)??'—'} 秒。无法分类的活动连接：${m.unclassified||0}。${m.error?'错误：'+m.error:''}`;$('events').innerHTML=d.events.map(e=>`<p>${esc(stamp(e.ts))} · ${esc(e.kind)} · ${esc(e.detail)}</p>`).join('');render()}catch(e){$('status').classList.add('offline');$('stateText').textContent=received?'界面更新失败 · 请刷新网页':e.status===503?'后台繁忙 · 正在重试':'网页请求超时或后台不可达 · 正在重试';recentLive=false;renderRecent();$('speed').textContent='—';$('active').textContent='—'}finally{busy=false}}
-$('rows').addEventListener('click',async e=>{let b=e.target.closest('[data-index]');if(!b)return;let r=visible[Number(b.dataset.index)];showDetail(r);$('detailText').textContent=JSON.stringify(r,null,2);$('detail').showModal();try{let p=new URLSearchParams({host:r.host||'',ip:r.ip||'',path:r.path||'',parent:r.parent||'',parent_path:r.parent_path||'',process:r.process||''});let history=await(await fetch('/api/history?'+p)).json();showDetail(r,history);$('detailText').textContent=JSON.stringify({汇总:r,最近连接历史:history},null,2)}catch{}});
-async function changeView(action){$('startView').disabled=true;$('allView').disabled=true;try{let response=await fetch('/api/view',{method:'POST',headers:{'Content-Type':'application/json','X-Local-Request':'1'},body:JSON.stringify({action})});if(!response.ok)throw Error('切换失败，请检查后台连接');$('day').value='';if(action==='all')$('search').value='';await refresh(true)}catch(e){alert(e.message)}finally{$('startView').disabled=false;$('allView').disabled=false}}
-$('startView').onclick=()=>changeView('start');$('allView').onclick=()=>changeView('all');
-$('close').onclick=()=>$('detail').close();$('detail').addEventListener('close',()=>{if(!paused)refresh(true)});$('pauseView').onclick=()=>{paused=!paused;$('pauseView').textContent=paused?'恢复网页刷新':'暂停网页刷新';$('pauseView').setAttribute('aria-pressed',String(paused));if(paused){$('stateText').textContent='网页已暂停 · 后台继续记录';$('updated').textContent+=' · 页面暂停'}else refresh(true)};let searchTimer;$('search').oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>refresh(true),250)};$('day').onchange=refresh;$('group').onchange=render;function saveRowLimit(){if(!$('rowLimit').checkValidity())return;try{localStorage.setItem('proxy-monitor-row-limit',$('allRows').checked?'all':$('rowLimit').value)}catch{}render()}$('rowLimit').oninput=()=>{if(!$('rowLimit').checkValidity())return;$('allRows').checked=false;saveRowLimit()};$('rowLimit').onchange=()=>{if(!$('rowLimit').reportValidity())return;saveRowLimit()};$('allRows').onchange=saveRowLimit;$('clearDay').onclick=()=>{$('day').value='';refresh()};refresh();setInterval(()=>refresh(),2000);
-
-const settingFields=['mode','endpoint','pipe','interval','connection_days','total_days','target_mb','csv_days','csv_budget_mb','alert_window','alert_mb'];
-$('openSettings').onclick=async()=>{try{let r=await fetch('/api/settings');if(!r.ok)throw Error('无法读取设置');let c=await r.json();for(let k of settingFields)$(k).value=c[k];$('alert_enabled').checked=c.alert_enabled;$('secret').value='';$('clear_secret').checked=false;$('secretState').textContent=c.has_secret?'Secret 已加密保存在当前 Windows 用户下；留空保留原值。':'尚未保存 Secret；如果 Clash 没设置密钥，可留空。';$('settingsResult').textContent='';$('settingsDialog').showModal()}catch(e){alert(e.message)}};
-$('closeSettings').onclick=()=>$('settingsDialog').close();
-async function submitSettings(test){if(!$('settingsForm').reportValidity())return;let c={};for(let k of settingFields)c[k]=$(k).value;c.alert_enabled=$('alert_enabled').checked;c.secret=$('secret').value;c.clear_secret=$('clear_secret').checked;$('settingsResult').textContent=test?'正在测试本地连接…':'正在保存…';try{let r=await fetch(test?'/api/test-settings':'/api/settings',{method:'POST',headers:{'Content-Type':'application/json','X-Local-Request':'1'},body:JSON.stringify(c)});let result=await r.json();if(!r.ok||!result.ok)throw Error(result.message||'操作失败');$('settingsResult').textContent=test?`连接成功：${result.source} · ${result.proxy_connections} 条代理连接`:'设置已保存，下一次采样自动应用。';if(!test){$('secret').value='';refresh(true)}}catch(e){$('settingsResult').textContent=e.message}}
-$('testSettings').onclick=()=>submitSettings(true);$('settingsForm').onsubmit=e=>{e.preventDefault();submitSettings(false)};
-
-const trafficChart=new TrafficTrend($('trend'),bytes);
-try{$('activityPanel').open=localStorage.getItem('proxy-monitor-activity-open')==='true'}catch{}
-$('activityPanel').ontoggle=()=>{try{localStorage.setItem('proxy-monitor-activity-open',String($('activityPanel').open))}catch{}};
-function renderActivity(d){
- if(!recentData)return;let a=recentData,sum=a.programs.reduce((n,r)=>n+r.down+r.up,0);
- $('activitySummary').textContent='流量趋势与提醒';
- $('activityScope').textContent='最近活动自 '+stamp(a.started)+' 开始记录，不受累计起点、搜索或日期筛选影响；条数沿用明细设置。程序按 10 秒合并，窗口边缘最多约 10 秒偏差，保留 60 分钟，超量会淘汰旧明细。';
- renderRecent();trafficChart.update(a.trend);$('programSummary').textContent='最近 5 分钟增量 · '+a.programs.length+' 个程序';
- $('alertSummary').textContent=d.settings.alert_enabled?'大流量提醒 · 已开启（'+d.settings.alert_window+' 分钟 / '+d.settings.alert_mb+' MiB）':'大流量提醒 · 已关闭';
- $('alertList').innerHTML=a.alerts.length?a.alerts.map(r=>{let x;try{x=JSON.parse(r.detail)}catch{x={program:r.detail,bytes:0,minutes:0}}return '<p>'+esc(stamp(r.ts)+' · '+x.program+' · '+x.minutes+' 分钟 '+bytes(x.bytes))+'</p>'}).join(''):'<p class="secondary">暂无大流量提醒记录。</p>';
-}
-function renderRecent(){if(!recentData)return;let rows=[...recentData.programs],rate=$('recentSort').value==='rate';rows.sort((a,b)=>rate?(b.rate_down+b.rate_up)-(a.rate_down+a.rate_up):(b.down+b.up)-(a.down+a.up));
- $('recentRows').innerHTML=rows.slice(0,$('allRows').checked?2000:($('rowLimit').checkValidity()?Number($('rowLimit').value):50)).map(r=>'<tr><td title="'+esc(r.path||'路径未能识别')+'"><div class="primary">'+esc(r.process)+'</div><div class="secondary">'+esc(r.parent||'父进程未知')+'</div>'+(r.binding!=='socket'?'<span class="tag">归属待核实</span>':'')+'</td><td class="number">'+bytes(r.down+r.up)+'<div class="secondary">↑ '+bytes(r.up)+' · ↓ '+bytes(r.down)+'</div></td><td class="number">'+(recentLive?bytes(r.rate_up+r.rate_down)+'/s':'—')+'</td></tr>').join('')||'<tr><td colspan="3">尚无近期代理流量，等待采样。</td></tr>';
-}
-function showDetail(r,history=[]){let values=[['程序',r.process||'未知程序'],['完整路径',r.path||'未能识别'],['父进程',r.parent||'未能识别'],['父进程路径',r.parent_path||'未能识别'],['最近 PID',r.pid||'未能识别'],['归属可信度',r.binding==='socket'?'端口与进程匹配':'待核实，仅核心名称不保证程序归属'],['首次记录',stamp(r.first_seen)],['最近活动',stamp(r.last_seen)],['上传 / 下载',bytes(r.up)+' / '+bytes(r.down)],['目的地址',(r.host||r.ip||'未知')+':'+r.port],['匹配规则',(r.rule||'未提供')+' '+(r.rule_payload||'')]];
- $('detailSummary').innerHTML='<dl class="detailsGrid">'+values.map(([k,v])=>'<dt>'+esc(k)+'</dt><dd>'+esc(v)+'</dd>').join('')+'</dl><p class="secondary">最近连接历史（最多展示 20 条；可能包含观察起点以前记录）</p>'+history.slice(0,20).map(x=>'<p class="secondary">'+esc(stamp(x.first_seen)+' — '+stamp(x.last_seen)+' · PID '+(x.pid||'未知')+' · '+(x.process||'未知程序')+' / '+(x.parent||'父进程未知'))+'</p>').join('');
-}
-$('historyPanel').addEventListener('toggle',()=>refresh(true));$('recentSort').onchange=renderRecent;$('alertSettings').onclick=()=>$('openSettings').click();
-</script><script>
-let usageData=null,usageBusy=false,usageUpdated=0;
-const usageDate=new Date();$('usageDate').value=usageDate.getFullYear()+'-'+String(usageDate.getMonth()+1).padStart(2,'0');
-function usageLabel(r){return r.recorded?bytes(r.up+r.down):'无记录'}
-function renderUsage(){if(!usageData)return;let d=usageData;
-for(let [id,r] of [['Today',d.today],['Month',d.this_month]]){$('usage'+id).textContent=usageLabel(r);$('usage'+id+'Split').textContent=r.recorded?'↑ '+bytes(r.up)+' · ↓ '+bytes(r.down):'尚无采集数据'}
-let rows=d[$('usageMode').value],max=Math.max(1,...rows.map(r=>r.up+r.down));
-$('usageScale').textContent='柱高范围：0 — '+bytes(max);
-$('usageBars').innerHTML=rows.map((r,i)=>`<button class="usageBar" data-usage="${i}" aria-label="${r.period}：${usageLabel(r)}" title="${r.period}：${usageLabel(r)}"><span class="usagePlot"><span class="usageStack" style="height:${100*(r.up+r.down)/max}%"><span class="usageUpload" style="flex:${r.up}"></span><span class="usageDownload" style="flex:${r.down}"></span></span></span><span>${r.period.slice(-2)}</span></button>`).join('');
-$('usageRows').innerHTML=[...rows].filter(r=>r.period<=new Date().getFullYear()+'-'+String(new Date().getMonth()+1).padStart(2,'0')+'-'+String(new Date().getDate()).padStart(2,'0')).reverse().map(r=>`<tr><td>${r.period}</td><td>${r.recorded?bytes(r.up):'—'}</td><td>${r.recorded?bytes(r.down):'—'}</td><td><strong>${usageLabel(r)}</strong></td><td>${!r.recorded?'无记录':r.imported?'含旧明细回填 · 可能不完整':r.samples?'已采集 '+(r.seconds/3600).toFixed(1)+' 小时':'仅保留汇总'}</td></tr>`).join('');
-function read(e){let b=e.target.closest('[data-usage]');if(!b)return;let r=rows[Number(b.dataset.usage)];$('usageReadout').textContent=r.period+' · '+(r.recorded?'上传 '+bytes(r.up)+' · 下载 '+bytes(r.down)+' · 合计 '+bytes(r.up+r.down):'无记录')}
-$('usageBars').onmouseover=read;$('usageBars').onfocusin=read;
-$('usageBars').onclick=async e=>{read(e);let b=e.target.closest('[data-usage]');if(!b)return;let period=rows[Number(b.dataset.usage)].period;$('usageProgramTitle').textContent=period+' · 程序排行';$('usagePrograms').open=true;$('usageProgramRows').innerHTML='<tr><td colspan="4">正在读取…</td></tr>';try{let r=await fetch('/api/usage-programs?'+new URLSearchParams({period}),{signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error();let result=await r.json();if($('usageProgramTitle').textContent!==period+' · 程序排行')return;$('usageProgramRows').innerHTML=result.length?result.map(r=>`<tr><td>${esc(r.process)}</td><td>${bytes(r.up)}</td><td>${bytes(r.down)}</td><td>${bytes(r.up+r.down)}</td></tr>`).join(''):'<tr><td colspan="4">无保留明细；日/月汇总不受影响。</td></tr>'}catch{$('usageProgramRows').innerHTML='<tr><td colspan="4">读取失败，请重新点击柱子。</td></tr>'}};
-
-}
-async function refreshUsage(force=false){if(usageBusy||(!force&&(paused||Date.now()-usageUpdated<30000)))return;usageBusy=true;let month=$('usageDate').value;try{let r=await fetch('/api/usage?'+new URLSearchParams({month}),{signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error();let d=await r.json();if(month!==$('usageDate').value)return;usageData=d;usageUpdated=Date.now();renderUsage();$('usageError').hidden=true}catch{$('usageError').hidden=false;$('usageError').textContent='用量统计暂时不可用，稍后自动重试。'}finally{usageBusy=false;if(month!==$('usageDate').value)refreshUsage(true)}}
-$('usageMode').onchange=renderUsage;$('usageDate').onchange=()=>refreshUsage(true);refreshUsage(true);setInterval(()=>refreshUsage(),5000);
-</script></body></html>
-
-
-
+</fieldset><fieldset class="settingsGrid"><legend>流量提醒</legend><label class="checkLabel"><input id="alert_enabled" type="checkbox">开启大流量提醒（默认关闭）</label><label>提醒窗口（分钟）<input id="alert_window" type="number" min="1" max="60" required></label><label>单个程序流量阈值（MiB）<input id="alert_mb" type="number" min="1" max="102400" required></label></fieldset><details><summary>存储限制说明</summary><p>CSV 每天 / 约 32 MiB 分卷，达到期限或容量后自动删除最旧文件；全程累计字节保留。数据库另有限额：连接 5 万条、每日目标组合 10 万条、事件 2 千条，每分钟清理，可能提前淘汰旧明细。容量目标不是整个目录的硬上限，临时文件可能使占用短暂超过目标。</p></details>
+<p id="secretState"></p><div class="toolbar"><button type="button" id="testSettings">测试连接</button><button type="submit" class="primaryButton">保存并应用</button></div><p id="settingsResult" role="status"></p></form>
+</dialog>
+<script defer src="/trend-chart.js"></script>
+<script defer src="/dashboard.js"></script>
+<script defer src="/history-ui.js"></script>
+<script defer src="/usage-ui.js"></script>
+</body>
+</html>
